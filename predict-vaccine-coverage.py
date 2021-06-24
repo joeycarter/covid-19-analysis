@@ -4,7 +4,8 @@
 Predict COVID-19 Vaccine Coverage
 =================================
 
-Predict the COVID-19 vaccine coverage in a given country or jurisdiction.
+A naive attempt to predict the COVID-19 vaccine coverage in a given country or location
+using a simple logistic growth model.
 """
 
 import argparse
@@ -44,11 +45,21 @@ def parse_args():
         "Input as ISO code, e.g. 'CAN' for Canada.",
     )
     parser.add_argument("-n", "--n-days", type=int, help="Fit the last N days only.")
+    parser.add_argument("-s", "--since", help="Fit only the data since this date.")
+    parser.add_argument(
+        "--draw-asymptote",
+        action="store_true",
+        help="Draw a dashed line indicating the asymptote of the logistic function.",
+    )
+    parser.add_argument("-t", "--twitter-handle", help="Add Twitter handle to plot")
     parser.add_argument(
         "-o", "--outdir", default="output", help="Directory where the plots are saved."
     )
 
     args = parser.parse_args()
+
+    if args.n_days is not None and args.since is not None:
+        raise Exception("choose one of '--n-days' and '--since'")
 
     return args
 
@@ -87,8 +98,10 @@ def fit_and_plot(df_main, args):
         df["timestamp"], df["people_vaccinated_per_hundred"]
     )
 
-    if args.n_days:
+    if args.n_days is not None:
         fit_xmin = df["timestamp"].max() - days_to_seconds(args.n_days)
+    elif args.since is not None:
+        fit_xmin = datetime.datetime.strptime(args.since, "%Y-%m-%d").timestamp()
     else:
         fit_xmin = df["timestamp"].min()
 
@@ -103,7 +116,9 @@ def fit_and_plot(df_main, args):
     func.SetParameter(2, df["timestamp"].min())
 
     # Fit the histogram with the original distribution; store graphics func but do not draw
-    fit_result = graph.Fit("func", "0RS")
+    fit_options = "0RMES"
+    fit_options += "V" if args.verbose else ""
+    fit_result = graph.Fit("func", fit_options)
 
     # Plot
     # ----
@@ -112,10 +127,10 @@ def fit_and_plot(df_main, args):
     fig, ax = aplt.subplots()
 
     # Display x-axis as date; do this before plotting
-    ax.frame.GetXaxis().SetTimeDisplay(2)
+    ax.frame.GetXaxis().SetTimeDisplay(1)
     ax.frame.GetXaxis().SetTimeFormat("%b %d, %Y")
     ax.frame.GetXaxis().SetTimeOffset(0)
-    ax.frame.GetXaxis().SetNdivisions(-403)
+    ax.frame.GetXaxis().SetNdivisions(-303)
 
     # Plot data
     ax.plot(
@@ -137,21 +152,29 @@ def fit_and_plot(df_main, args):
     ax.add_margins(bottom=0.05, top=0.15, left=0.05)
 
     # Draw line at fitted p0
-    line = root.TLine(
-        ax.get_xlim()[0],
-        fit_result.Parameter(0),
-        ax.get_xlim()[1],
-        fit_result.Parameter(0),
-    )
-    ax.plot(line, linestyle=2)
+    if args.draw_asymptote:
+        line = root.TLine(
+            ax.get_xlim()[0],
+            fit_result.Parameter(0),
+            ax.get_xlim()[1],
+            fit_result.Parameter(0),
+        )
+        ax.plot(line, linestyle=2)
 
-    ax.text(0.2, 0.88, "#it{Vaccine Coverage:} Data & Predictions")
+    ax.text(0.2, 0.88, "#it{#bf{Vaccine Coverage}} Data & Predictions")
 
     last_updated = datetime.datetime.strptime(df["date"].iloc[-1], "%Y-%m-%d").strftime(
         "%b %d, %Y"
     )
     ax.text(0.2, 0.80, f"Last Updated: {last_updated}", size=22)
-    ax.text(0.2, 0.75, f"Fit last {args.n_days} days", size=22)
+
+    if args.n_days is not None:
+        ax.text(0.2, 0.75, f"Fit last {args.n_days} days", size=22)
+    elif args.since is not None:
+        fit_since = datetime.datetime.strptime(args.since, "%Y-%m-%d").strftime(
+            "%b %d, %Y"
+        )
+        ax.text(0.2, 0.75, f"Fit since {fit_since}", size=22)
 
     # Predicting maximum vaccination coverage (from fit)
     pred_max = ufloat(fit_result.Parameter(0), fit_result.ParError(0))
@@ -171,6 +194,15 @@ def fit_and_plot(df_main, args):
     ax.set_ylabel("Share of people with #geq 1 dose [%]")
 
     ax.legend(loc=(0.20, 0.55, 0.35, 0.65), textsize=22)
+
+    if args.twitter_handle:
+        ax.text(
+            0.95,
+            0.96,
+            f"#it{{{args.twitter_handle}}}",
+            size=14,
+            align=31,
+        )
 
     # Save the plot
     if not os.path.exists(args.outdir):
