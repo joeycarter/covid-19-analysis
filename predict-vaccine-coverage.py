@@ -94,8 +94,11 @@ def fit_and_plot(df_main, args):
 
     # Fit
     # ---
-    graph = aplt.root_helpers.graph(
+    graph_part = aplt.root_helpers.graph(
         df["timestamp"], df["people_vaccinated_per_hundred"]
+    )
+    graph_full = aplt.root_helpers.graph(
+        df["timestamp"], df["people_fully_vaccinated_per_hundred"]
     )
 
     if args.n_days is not None:
@@ -107,18 +110,35 @@ def fit_and_plot(df_main, args):
 
     fit_xmax = df["timestamp"].max() + days_to_seconds(60)
 
-    # Fit function
-    func = root.TF1(
-        "func", "[0] / (1 + TMath::Exp(-[1] * (x - [2])))", fit_xmin, fit_xmax
+    # Fit functions
+    func_part = root.TF1(
+        "func_part", "[0] / (1 + TMath::Exp(-[1] * (x - [2])))", fit_xmin, fit_xmax
     )
-    func.SetParameter(0, 70)
-    func.SetParameter(1, 1e-8)
-    func.SetParameter(2, df["timestamp"].min())
+    func_part.SetParameter(0, 70)
+    func_part.SetParameter(1, 1e-8)
+    func_part.SetParameter(2, df["timestamp"].min())
 
     # Fit the histogram with the original distribution; store graphics func but do not draw
     fit_options = "0RMES"
     fit_options += "V" if args.verbose else ""
-    fit_result = graph.Fit("func", fit_options)
+
+    print("-------------------------")
+    print("Fit: Partially vaccinated")
+    print("-------------------------")
+    fit_result_part = graph_part.Fit("func_part", fit_options)
+
+    func_full = root.TF1(
+        "func_full", "[0] / (1 + TMath::Exp(-[1] * (x - [2])))", fit_xmin, fit_xmax
+    )
+    func_full.SetParameter(0, fit_result_part.Parameter(0))
+    func_full.FixParameter(0, fit_result_part.Parameter(0))
+    func_full.SetParameter(1, 1e-8)
+    func_full.SetParameter(2, df["timestamp"].min())
+
+    print("--------------------")
+    print("Fit: Fuly vaccinated")
+    print("--------------------")
+    fit_result_full = graph_full.Fit("func_full", fit_options)
 
     # Plot
     # ----
@@ -128,72 +148,87 @@ def fit_and_plot(df_main, args):
 
     # Display x-axis as date; do this before plotting
     ax.frame.GetXaxis().SetTimeDisplay(1)
-    ax.frame.GetXaxis().SetTimeFormat("%b %d, %Y")
+    ax.frame.GetXaxis().SetTimeFormat("%b %d")
     ax.frame.GetXaxis().SetTimeOffset(0)
     ax.frame.GetXaxis().SetNdivisions(-303)
 
     # Plot data
     ax.plot(
-        graph,
+        graph_part,
         "P",
         markerstyle=20,
-        markercolor=root.kAzure - 2,
+        markercolor=root.kBlue - 9,
         markersize=0.7,
-        label=df["location"].iloc[0],
+        label="At least one dose",
+        labelfmt="P",
+    )
+
+    # Plot data
+    ax.plot(
+        graph_full,
+        "P",
+        markerstyle=20,
+        markercolor=root.kRed - 9,
+        markersize=0.7,
+        label="Fully vaccinated",
         labelfmt="P",
     )
 
     # Draw the fit function
-    func.SetNpx(1000)
-    ax.plot(func, linecolor=root.kRed + 1, label="Fit (logistic)", labelfmt="L")
+    func_part.SetNpx(1000)
+    ax.plot(func_part, linecolor=root.kBlue + 1, label="Fit (logistic)", labelfmt="L")
+
+    func_full.SetNpx(1000)
+    ax.plot(func_full, linecolor=root.kRed + 1, label="Fit (logistic)", labelfmt="L")
 
     ax.set_xlim(right=fit_xmax)
 
-    ax.add_margins(bottom=0.05, top=0.15, left=0.05)
+    ax.add_margins(bottom=0.07, top=0.15, left=0.05)
 
     # Draw line at fitted p0
     if args.draw_asymptote:
         line = root.TLine(
             ax.get_xlim()[0],
-            fit_result.Parameter(0),
+            fit_result_part.Parameter(0),
             ax.get_xlim()[1],
-            fit_result.Parameter(0),
+            fit_result_part.Parameter(0),
         )
         ax.plot(line, linestyle=2)
 
     ax.text(0.2, 0.88, "#it{#bf{Vaccine Coverage}} Data & Predictions")
+    ax.text(0.2, 0.82, df["location"].iloc[0], size=22)
 
     last_updated = datetime.datetime.strptime(df["date"].iloc[-1], "%Y-%m-%d").strftime(
         "%b %d, %Y"
     )
-    ax.text(0.2, 0.80, f"Last Updated: {last_updated}", size=22)
+    ax.text(0.2, 0.77, f"Last Updated: {last_updated}", size=22)
 
     if args.n_days is not None:
-        ax.text(0.2, 0.75, f"Fit last {args.n_days} days", size=22)
+        ax.text(0.2, 0.72, f"Fit last {args.n_days} days", size=22)
     elif args.since is not None:
         fit_since = datetime.datetime.strptime(args.since, "%Y-%m-%d").strftime(
             "%b %d, %Y"
         )
-        ax.text(0.2, 0.75, f"Fit since {fit_since}", size=22)
+        ax.text(0.2, 0.72, f"Fit since {fit_since}", size=22)
 
     # Predicting maximum vaccination coverage (from fit)
-    pred_max = ufloat(fit_result.Parameter(0), fit_result.ParError(0))
+    pred_max = ufloat(fit_result_part.Parameter(0), fit_result_part.ParError(0))
     ax.text(
-        0.2, 0.70, f"Predicted max: {pred_max:.2uL} %".replace("\pm", "#pm"), size=22
+        0.2, 0.67, f"Predicted max: {pred_max:.2uL} %".replace("\pm", "#pm"), size=22
     )
 
     ax.text(
         0.91,
-        0.2,
+        0.20,
         "#it{Source: ourworldindata.org/covid-vaccinations}",
         size=14,
         align=31,
     )
 
     ax.set_xlabel("Date")
-    ax.set_ylabel("Share of people with #geq 1 dose [%]")
+    ax.set_ylabel("Share of population [%]")
 
-    ax.legend(loc=(0.20, 0.55, 0.35, 0.65), textsize=22)
+    ax.legend(loc=(0.20, 0.45, 0.35, 0.63), textsize=22)
 
     if args.twitter_handle:
         ax.text(
