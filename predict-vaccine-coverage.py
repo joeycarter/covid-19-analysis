@@ -84,13 +84,28 @@ def fit_and_plot(df_main, args):
     """
     # Select data for the desired location
     location = args.location.upper()
-    df = df_main[df_main["iso_code"].str.match(location)]
+    location_select = df_main["iso_code"].str.match(location)
+    if location_select.any():
+        df = df_main[location_select]
+    else:
+        raise Exception(f"no data for location '{args.location}'")
+
+    print(f"Analyzing COVID-19 vaccination data for {df['location'].iloc[0]}")
+    print()
 
     # Drop missing vaccination data
     df = df[df["people_vaccinated_per_hundred"].notnull()]
 
     # Compute timestamps
     df["timestamp"] = pd.to_datetime(df["date"], format="%Y-%m-%d").astype(int) / 1e9
+
+    # Print current vaccine data
+    print("------------------------")
+    print("Current Vaccine Coverage")
+    print("------------------------")
+    print(f"At least one dose: {df['people_vaccinated_per_hundred'].iloc[-1]} %")
+    print(f"Fully vaccinated:  {df['people_fully_vaccinated_per_hundred'].iloc[-1]} %")
+    print()
 
     # Fit
     # ---
@@ -126,6 +141,7 @@ def fit_and_plot(df_main, args):
     print("Fit: Partially vaccinated")
     print("-------------------------")
     fit_result_part = graph_part.Fit("func_part", fit_options)
+    print()
 
     func_full = root.TF1(
         "func_full", "[0] / (1 + TMath::Exp(-[1] * (x - [2])))", fit_xmin, fit_xmax
@@ -135,10 +151,11 @@ def fit_and_plot(df_main, args):
     func_full.SetParameter(1, 1e-8)
     func_full.SetParameter(2, df["timestamp"].min())
 
-    print("--------------------")
-    print("Fit: Fuly vaccinated")
-    print("--------------------")
+    print("---------------------")
+    print("Fit: Fully vaccinated")
+    print("---------------------")
     fit_result_full = graph_full.Fit("func_full", fit_options)
+    print()
 
     # Plot
     # ----
