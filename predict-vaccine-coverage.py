@@ -144,7 +144,7 @@ def fit_and_plot(df_main, args):
     print()
 
     func_full = root.TF1(
-        "func_full", "[0] / (1 + TMath::Exp(-[1] * (x - [2])))", fit_xmin, fit_xmax
+        "func_full", "[0] / (1 + TMath::Exp(-[1] * (x - [2])))", fit_xmin + days_to_seconds(28), fit_xmax
     )
     func_full.SetParameter(0, fit_result_part.Parameter(0))
     func_full.FixParameter(0, fit_result_part.Parameter(0))
@@ -227,6 +227,8 @@ def fit_and_plot(df_main, args):
             "%b %d, %Y"
         )
         ax.text(0.2, 0.72, f"Fit since {fit_since}", size=22)
+    else:
+        ax.text(0.2, 0.72, f"Fit all data", size=22)
 
     # Predicting maximum vaccination coverage (from fit)
     pred_max = ufloat(fit_result_part.Parameter(0), fit_result_part.ParError(0))
