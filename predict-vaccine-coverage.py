@@ -177,7 +177,7 @@ def fit_and_plot(df_main, args):
     ax.frame.GetXaxis().SetTimeDisplay(1)
     ax.frame.GetXaxis().SetTimeFormat("%b %d")
     ax.frame.GetXaxis().SetTimeOffset(0)
-    ax.frame.GetXaxis().SetNdivisions(-303)
+    ax.frame.GetXaxis().SetNdivisions(-405)
 
     # Plot data
     ax.plot(
