@@ -51,6 +51,12 @@ def parse_args():
         action="store_true",
         help="Draw a dashed line indicating the asymptote of the logistic function.",
     )
+    parser.add_argument(
+        "--free-full",
+        action="store_true",
+        help="Do not fix the maximum of the logistic function for the fully vaccinated "
+        "to the maximum extracted from the fit to the partially vaccinated.",
+    )
     parser.add_argument("-t", "--twitter-handle", help="Add Twitter handle to plot")
     parser.add_argument(
         "-o", "--outdir", default="output", help="Directory where the plots are saved."
@@ -144,10 +150,14 @@ def fit_and_plot(df_main, args):
     print()
 
     func_full = root.TF1(
-        "func_full", "[0] / (1 + TMath::Exp(-[1] * (x - [2])))", fit_xmin + days_to_seconds(28), fit_xmax
+        "func_full",
+        "[0] / (1 + TMath::Exp(-[1] * (x - [2])))",
+        fit_xmin + days_to_seconds(28),
+        fit_xmax,
     )
     func_full.SetParameter(0, fit_result_part.Parameter(0))
-    func_full.FixParameter(0, fit_result_part.Parameter(0))
+    if not args.free_full:
+        func_full.FixParameter(0, fit_result_part.Parameter(0))
     func_full.SetParameter(1, 1e-8)
     func_full.SetParameter(2, df["timestamp"].min())
 
